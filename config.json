@@ -3,7 +3,7 @@
     "exclude_title_keywords": "odds, betting, bet, trade, trading, Links, link",
     "exclude_body_keywords": "",
     "min_word_count": 125,
-    "max_age_hours": 3.0,
+    "max_age_hours": 24.0,
     "voice": "en-US-BrianNeural",
     "font_color": "#FFFFFF",
     "bg_color": "#000000",
