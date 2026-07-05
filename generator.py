@@ -23,6 +23,15 @@ except ImportError:
     from moviepy.editor import ImageClip, AudioFileClip, CompositeVideoClip
     MOVIEPY_V2 = False
 
+# ডাকডাকগো এবং উইকিমিডিয়া ব্লক খেলে হাই-কোয়ালিটি ভিডিও সচল রাখার আল্ট্রা-এইচডি স্পোর্টস ব্যাকড্রপস
+GENERIC_SPORTS_FALLBACKS = [
+    "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1920&q=80",  # Basketball Court
+    "https://images.unsplash.com/photo-1519766304817-4f37bda74a27?w=1920&q=80",  # Stadium Lights
+    "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1920&q=80",  # Sports ball
+    "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1920&q=80",  # Running track
+    "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1920&q=80",  # Sports stadium
+]
+
 async def generate_voice_and_subtitles(text, voice, audio_path, srt_path):
     communicate = edge_tts.Communicate(text, voice)
     submaker = edge_tts.SubMaker()
@@ -43,7 +52,6 @@ def scrape_article(url):
     paragraphs = soup.find_all('p')
     cleaned = []
     
-    # আর্টিকেলের বডি থেকে অপ্রয়োজনীয় সোশ্যাল মিডিয়া ও সি.টি.এ ব্লক ফিল্টার 
     unwanted_phrases = [
         "follow", "read more", "cookies", "subscribe", 
         "social media information", "like our page", 
@@ -67,6 +75,36 @@ def hex_to_ass_color(hex_str, opacity_float=1.0):
     alpha_hex = f"{alpha_val:02X}"
     return f"&H{alpha_hex}{b}{g}{r}"
 
+def fallback_wikimedia_images(keyword, max_results=20):
+    """উইকিমিডিয়া কমন্স API থেকে সম্পূর্ণ ফ্রিতে ছবি সার্চ করার ফ্লেক্সিবল ফাংশন"""
+    print(f"Trying Wikimedia Commons fallback for: '{keyword}'...")
+    try:
+        url = "https://commons.wikimedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "generator": "search",
+            "gsrsearch": f"filetype:bitmap {keyword}",
+            "gsrlimit": max_results,
+            "prop": "imageinfo",
+            "iiprop": "url"
+        }
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            data = r.json()
+            pages = data.get("query", {}).get("pages", {})
+            urls = []
+            for page_id, page_info in pages.items():
+                image_info = page_info.get("imageinfo", [])
+                if image_info:
+                    img_url = image_info[0].get("url")
+                    if img_url:
+                        urls.append(img_url)
+            return urls
+    except Exception as e:
+        print(f"Wikimedia API search failed: {e}")
+    return []
+
 def select_thumbnail_and_crop(images_dir, output_thumbnail_path):
     img_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
     sixteen_nine_candidates = []
@@ -76,7 +114,8 @@ def select_thumbnail_and_crop(images_dir, output_thumbnail_path):
         try:
             with Image.open(path) as img:
                 w, h = img.size
-                if 1.6 <= (w / h) <= 1.9:
+                ratio = w / h
+                if 1.6 <= ratio <= 1.9:  
                     sixteen_nine_candidates.append(path)
         except Exception: pass
 
@@ -102,7 +141,6 @@ def parse_srt_start_times(srt_path):
     return sorted(list(set(start_times)))
 
 def clear_temp_workspace(workspace_dir, images_dir):
-    """ক্লিপ মিক্সিং এড়াতে প্রতি লুপের শুরুতে টেম্পোরারি ফাইলগুলো ক্লিন করার ফাংশন"""
     audio_path = os.path.join(workspace_dir, "audio.mp3")
     srt_path = os.path.join(workspace_dir, "subtitles.srt")
     temp_video = os.path.join(workspace_dir, "temp_video.mp4")
@@ -164,7 +202,6 @@ def main():
     with open("config.json", "r", encoding="utf-8") as f:
         config = json.load(f)
 
-    # আপলোড ডাটাবেজ ফাইল লোড
     if not os.path.exists("processed_urls.txt"):
         print("processed_urls.txt not found. Auto-creating a fresh database file...")
         with open("processed_urls.txt", "w", encoding="utf-8") as f:
@@ -277,19 +314,39 @@ def main():
             max_images = 30 if audio_duration > 240.0 else 20
             print(f"Audio Duration: {audio_duration:.2f}s. Dynamic Target: Download {max_images} images.")
 
-            # সার্চ এবং ডাউনলোড (টাইপোটি এখানে ফিক্সড করা হয়েছে)
+            # সার্চ এবং ডাউনলোড 
             words = re.findall(r'\b[A-Z][a-z]{3,}\b', scraped_content)
             keyword = f"{words[0]} {words[1]}" if len(words) >= 2 else "Sports"
             
-            results = DDGS().images(keyword, max_results=max_images)
-            for idx_img, result in enumerate(results):
+            urls = []
+            try:
+                print(f"Searching DDG for {max_images} images: '{keyword}'...")
+                results = DDGS().images(keyword, max_results=max_images)
+                urls = [r.get('image') for r in results if r.get('image')]
+            except Exception as ddg_err:
+                print(f"DuckDuckGo search rate-limited or blocked: {ddg_err}")
+
+            # যদি DDG রেট-লিমিট বা ব্লকড হয়, তবে উইকিমিডিয়া এবং আনস্প্ল্যাশ ফলব্যাক দিয়ে ভিডিও চালু রাখব 
+            if not urls:
+                urls = fallback_wikimedia_images(keyword, max_results=max_images)
+            
+            if not urls:
+                print("No custom images found. Using premium generic sports backdrops as fallback...")
+                urls = GENERIC_SPORTS_FALLBACKS * (max_images // len(GENERIC_SPORTS_FALLBACKS) + 1)
+                urls = urls[:max_images]
+
+            total_downloaded = 0
+            for idx_img, image_url in enumerate(urls):
                 try:
-                    r = requests.get(result['image'], timeout=5)
+                    r = requests.get(image_url, timeout=5)
                     if r.status_code == 200:
-                        # এখানে টাইপোটি (i+1 এর জায়গায় idx_img+1) নিখুঁতভাবে সংশোধন করা হয়েছে 
+                        # এখানে টাইপোটি (idx_img+1) নিখুঁতভাবে নিশ্চিত করা হয়েছে 
                         with open(os.path.join(images_dir, f"img_{idx_img+1:02d}.jpg"), 'wb') as f:
                             f.write(r.content)
+                        total_downloaded += 1
                 except Exception: pass
+
+            print(f"Collected {total_downloaded} images for rendering.")
 
             # থাম্বনেইল
             thumbnail_path = os.path.join(workspace_dir, "thumbnail.jpg")
