@@ -33,15 +33,16 @@ jobs:
 
     - name: Run AI Generator Engine
       env:
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+        GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
         YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
       run: |
         python generator.py
 
-    # --- if: always() কন্ডিশন ব্যবহার করে ডাটাবেজ সুরক্ষার অতি-জরুরি ধাপ ---
     - name: Commit & Push Processed URLs Database
-      if: always()  # কোড মাঝপথে ক্র্যাশ বা টাইমআউট করলেও আগের আপলোড হওয়া খবরের ডাটাবেজ সেভ থাকবে
+      if: always()  # কোড মাঝপথে ক্র্যাশ করলেও আগের আপলোড ডাটাবেজ সুরক্ষায় সেভ থাকবে
       run: |
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
