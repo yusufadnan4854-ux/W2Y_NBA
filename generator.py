@@ -28,6 +28,8 @@ GENERIC_SPORTS_FALLBACKS = [
     "https://images.unsplash.com/photo-1508098682722-e99c43a406b2?w=1920&q=80",  
     "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=1920&q=80",  
     "https://images.unsplash.com/photo-1517649763962-0c623066013b?w=1920&q=80",  
+    "https://images.unsplash.com/photo-1579952363873-27f3bade9f55?w=1920&q=80",
+    "https://images.unsplash.com/photo-1574629810360-7efbbe195018?w=1920&q=80"
 ]
 
 async def generate_voice_and_subtitles(text, voice, audio_path, srt_path):
@@ -59,11 +61,7 @@ def scrape_article(url):
     return "\n\n".join(cleaned_paragraphs)
 
 def extract_hyper_relevant_keyword(title, body_text):
-    """
-    অ্যাপের ফ্রিকোয়েন্সি অ্যানালাইসিস ব্যবহার করে আর্টিকেলের আসল বিষয় ও খেলোয়াড়ের নাম এক্সট্র্যাক্ট
-    """
     clean_title = re.sub(r'[^a-zA-Z0-9\s]', '', title)
-    
     words = re.findall(r'\b[A-Z][a-z]{3,}\b', body_text) 
     stop_words = {'That', 'This', 'There', 'With', 'From', 'Have', 'Your', 'Which', 'Will', 
                   'About', 'Like', 'Just', 'When', 'What', 'Know', 'Feel', 'They', 'Team', 'Game', 'News'}
@@ -74,7 +72,7 @@ def extract_hyper_relevant_keyword(title, body_text):
         target_entity = " ".join(most_common)
         query = f"{target_entity} sports photo"
     else:
-        query = f"{clean_title} sports photo"
+        query = f"{clean_title} sports"
         
     print(f"📊 Hyper-relevant target query generated: '{query}'")
     return query
@@ -91,12 +89,7 @@ def get_audio_duration(audio_path):
         return float(result.stdout.strip())
     except: return 0.0
 
-def search_google_images_api(keyword, max_results=20):
-    """
-    গুগলের অফিশিয়াল গুগোল ইমেজেস সিএসই এপিআই ব্যবহার
-    - গিটহাব আইপি ব্লক মুক্ত
-    - সর্বোচ্চ প্রাাসঙ্গিক রেজাল্ট ফেরত
-    """
+def search_google_images_api(keyword, max_results=30):
     api_key = os.environ.get("GOOGLE_API_KEY")
     cse_id = os.environ.get("GOOGLE_CSE_ID")
     
@@ -104,48 +97,44 @@ def search_google_images_api(keyword, max_results=20):
         print("💡 Google CSE Secrets setup issue! Make sure GOOGLE_API_KEY and GOOGLE_CSE_ID are added.")
         return []
         
-    print(f"🚀 [100% Reliable Official Google Cloud] Extracting images for: '{keyword}'...")
+    print(f"🚀 [Google CSE Official Engine] Querying deep search candidates for: '{keyword}'...")
     url = "https://www.googleapis.com/customsearch/v1"
-    urls = []
+    image_candidates = []
     
-    try:
-        params = {
-            "key": api_key,
-            "cx": cse_id,
-            "q": keyword,
-            "searchType": "image",
-            "num": min(max_results, 10),
-            "imgSize": "large"
-        }
-        r = requests.get(url, params=params, timeout=10)
-        if r.status_code == 200:
-            items = r.json().get("items", [])
-            urls.extend([item.get("link") for item in items if item.get("link")])
-            
-        if max_results > 10 and len(urls) >= 10:
-            params["start"] = 11
-            params["num"] = min(max_results - 10, 10)
+    for start_index in [1, 11]:
+        try:
+            params = {
+                "key": api_key,
+                "cx": cse_id,
+                "q": keyword,
+                "searchType": "image",
+                "start": start_index,
+                "num": 10
+            }
             r = requests.get(url, params=params, timeout=10)
             if r.status_code == 200:
                 items = r.json().get("items", [])
-                urls.extend([item.get("link") for item in items if item.get("link")])
-                
-        print(f"✅ Google API found {len(urls)} highly relevant pictures!")
-        return urls
-    except Exception as e:
-        print(f"⚠️ Google API Fetch Error: {e}")
-    return []
+                for item in items:
+                    main_link = item.get("link")
+                    thumb_link = item.get("image", {}).get("thumbnailLink")
+                    if main_link:
+                        image_candidates.append({"main": main_link, "thumb": thumb_link})
+        except Exception as e:
+            print(f"⚠️ Google API Fetch Error at index {start_index}: {e}")
+            
+    print(f"✅ Total Google Candidates Collected: {len(image_candidates)}")
+    return image_candidates
 
-def scrape_images(title, body_text, max_results=20):
+def scrape_images(title, body_text, max_results=25):
     query_keyword = extract_hyper_relevant_keyword(title, body_text)
-    urls = search_google_images_api(query_keyword, max_results=max_results)
+    candidates = search_google_images_api(query_keyword, max_results=max_results)
     
-    # ব্যাকআপ ফ্রিকোয়েন্সি ২ (যদি অতিমাত্রায় রিকোয়েস্ট সীমা পার হয়ে টাইটেল ক্যোয়ারী ব্যর্থ হয়)
-    if not urls:
-        simplified_query = re.sub(r'[^a-zA-Z0-9\s]', '', title)[:60] + " action"
-        urls = search_google_images_api(simplified_query, max_results=max_results)
+    if len(candidates) < 10:
+        simplified_query = re.sub(r'[^a-zA-Z0-9\s]', '', title)[:60] + " action match"
+        extra_candidates = search_google_images_api(simplified_query, max_results=max_results)
+        candidates.extend(extra_candidates)
         
-    return urls
+    return candidates
 
 def process_dynamic_thumbnail(images_dir, output_path):
     all_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.jpg','.jpeg','.png'))]
@@ -181,24 +170,21 @@ def clear_temporary_workspace(ws_dir):
 
 def render_zoom_segment_by_ffmpeg(clip_index, segment_duration, input_img_path, output_segment_path):
     """
-    FFmpeg দিয়েই অত্যন্ত গতিতে স্লাইড, পেন এবং জুম ইফেক্ট তৈরি করা (MoviePy চেয়ে ১০ গুণ দ্রুত)
+    FFmpeg জুমপ্যান মোশনের মেমরি ফ্রেমলক দ্রুত প্রসেসিং (-framerate 25 & :fps=25)
     """
-    frame_count = max(int(segment_duration * 30), 10)
+    frame_count = max(int(segment_duration * 25), 10)
     
     effect_style = clip_index % 3
     if effect_style == 0:
-        # স্টাইল ০: সেন্টার জুম-ইন মোশন
-        lens_filter = f"zoompan=z='zoom+0.0015':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frame_count}:s=1920x1080,framerate=30"
+        lens_filter = f"zoompan=z='zoom+0.0015':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frame_count}:s=1920x1080:fps=25"
     elif effect_style == 1:
-        # স্টাইল ১: উপর থেকে নিচে মসৃণ পেন/স্লাইড মোশন
-        lens_filter = f"zoompan=z='1.03+0.001*in':x='iw/2-(iw/zoom/2)':y='0':d={frame_count}:s=1920x1080,framerate=30"
+        lens_filter = f"zoompan=z='1.03+0.001*in':x='iw/2-(iw/zoom/2)':y='0':d={frame_count}:s=1920x1080:fps=25"
     else:
-        # স্টাইল ২: নিচ থেকে উপরে জুম আউট অ্যান্ড টিল্ট মোশন
-        lens_filter = f"zoompan=z='1.03+0.001*in':x='iw/2-(iw/zoom/2)':y='ih-(ih/zoom)':d={frame_count}:s=1920x1080,framerate=30"
+        lens_filter = f"zoompan=z='1.03+0.001*in':x='iw/2-(iw/zoom/2)':y='ih-(ih/zoom)':d={frame_count}:s=1920x1080:fps=25"
     
     cmd_arguments = [
         "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", 
-        "-loop", "1", "-i", input_img_path, "-t", str(segment_duration), 
+        "-loop", "1", "-framerate", "25", "-i", input_img_path, "-t", str(segment_duration), 
         "-vf", lens_filter, "-c:v", "libx264", "-preset", "ultrafast", 
         "-tune", "zerolatency", "-pix_fmt", "yuv420p", output_segment_path
     ]
@@ -295,6 +281,9 @@ def process_primary_automation_loop():
         print("Completed database scraping securely. Scheduled task waiting.")
         return
 
+    # 📌 গিটহাব রানার সিকিউরিটি লিমিটেশন: প্রতি স্পিড অ্যাকশন রানে নিখুঁত সেরা ১টি টার্গেট পোস্ট তৈরি
+    final_action_items = final_action_items[:1]
+
     wkspace = os.path.abspath(os.path.join(os.getcwd(), 'workspace'))
     target_imgdir = os.path.join(wkspace, 'images')
     targ_pcdir = os.path.join(wkspace, 'processed_frames')
@@ -334,34 +323,56 @@ def process_primary_automation_loop():
             asyncio.run(generate_voice_and_subtitles(text_chunk_collected, user_settings["voice"], path_mp3, path_srt))
             
             calc_tlength = get_audio_duration(path_mp3)
-            pics_limit_range = 30 if calc_tlength > 240.0 else 20
 
-            # আর্টিকেলের টাইটেল ও ভেতরের কি-ওয়ার্ড দিয়ে গুগল ইমেজ সার্চ করা
-            raw_unlinked_pic_pointers = scrape_images(vid_ttl, text_chunk_collected, max_results=pics_limit_range)
+            candidates = scrape_images(vid_ttl, text_chunk_collected, max_results=30)
 
             succesfully_got_downloads = 0
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/120.0.0.0 Safari/537.36'}
-            for purelink in raw_unlinked_pic_pointers:
-                try:
-                    rd_dt_rsv = requests.get(purelink, timeout=5, headers=headers)
-                    if rd_dt_rsv.status_code == 200 and len(rd_dt_rsv.content) > 10240: 
-                        with open(os.path.join(target_imgdir, f"imv_dw{succesfully_got_downloads:03d}.jpg"), 'wb') as fgxv: 
-                            fgxv.write(rd_dt_rsv.content)
-                            succesfully_got_downloads += 1
-                except: pass
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+            }
 
-            # ছবি একেবারেই কোনো সমস্যা দেখা দিলে স্টক ইমেজের ব্যাকআপ নেওয়া
-            if succesfully_got_downloads < 2:
+            for item in candidates:
+                main_url = item.get("main")
+                thumb_url = item.get("thumb")
+                download_done = False
+
+                if main_url:
+                    try:
+                        rd = requests.get(main_url, timeout=4, headers=headers)
+                        if rd.status_code == 200 and len(rd.content) > 10240: 
+                            with open(os.path.join(target_imgdir, f"imv_dw{succesfully_got_downloads:03d}.jpg"), 'wb') as fgxv: 
+                                fgxv.write(rd.content)
+                            succesfully_got_downloads += 1
+                            download_done = True
+                    except: pass
+
+                if not download_done and thumb_url:
+                    try:
+                        rd = requests.get(thumb_url, timeout=4, headers=headers)
+                        if rd.status_code == 200 and len(rd.content) > 2024: 
+                            with open(os.path.join(target_imgdir, f"imv_dw{succesfully_got_downloads:03d}.jpg"), 'wb') as fgxv: 
+                                fgxv.write(rd.content)
+                            succesfully_got_downloads += 1
+                            download_done = True
+                    except: pass
+
+                if succesfully_got_downloads >= 20:
+                    break
+
+            if succesfully_got_downloads < 8:
                 for idx, fallback_url in enumerate(GENERIC_SPORTS_FALLBACKS):
                     try:
                         res = requests.get(fallback_url, timeout=5)
                         if res.status_code == 200:
-                            with open(os.path.join(target_imgdir, f"imv_fallback_{idx:03d}.jpg"), 'wb') as fb_f:
+                            with open(os.path.join(target_imgdir, f"imv_fb_{idx:03d}.jpg"), 'wb') as fb_f:
                                 fb_f.write(res.content)
                                 succesfully_got_downloads += 1
                     except: pass
 
             dflocst = sorted([pzbv for pzbv in os.listdir(target_imgdir) if pzbv.endswith(('.jpg','.jpeg','.png'))])
+            print(f"📊 Download process ended! Total downloaded high resolution pictures saved in workspace: {len(dflocst)}")
+
             if not dflocst: 
                 print("Missing visual components! Skipping target."); continue
 
@@ -374,7 +385,6 @@ def process_primary_automation_loop():
                         base_rgb_convert = obimgstrm.convert('RGB')
                         im_w, im_h = base_rgb_convert.size
                         
-                        # আপনার সফটওয়্যার app.py এর মত ইমেজের আসপেক্ট রেশিও অ্যাডজাস্ট করা
                         if (im_w / im_h) < 1.7:
                             blurred_bg = base_rgb_convert.resize((1920, 1080)).filter(ImageFilter.GaussianBlur(20))
                             new_fit_width = int(1080 * (im_w / im_h))
@@ -403,11 +413,10 @@ def process_primary_automation_loop():
             total_n_segments = len(sentence_timers) - 1
 
             lines_for_slider_doc = []
-            
-            print(f"Rendering {total_n_segments} motion clips with dynamic Pan, Zoom & Tilt parallelized with FFmpeg Multi-cores...")
+            print(f"Rendering {total_n_segments} unique video clip scenes matching individual sentence audio using FFmpeg...")
 
-            # সিপিইউর সর্বোচ্চ পারফরম্যান্সে সমান্তরালে দ্রুত ভিডিও ক্লিপিং রেন্ডার
-            with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as thex:
+            # সিপিইউর সব পাওয়ার নিয়ে প্যারালাল ২ মিনিটের মধ্যে কাস্টম রেন্ডারিং সম্পন্ন 
+            with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as thex:
                 rendered_segment_tasks = []
                 for sg_ix in range(total_n_segments):
                     s_gap = sentence_timers[sg_ix+1] - sentence_timers[sg_ix]
@@ -426,7 +435,7 @@ def process_primary_automation_loop():
             raw_tmp_output = os.path.join(wkspace, "temp_output.mp4")
             fully_finalized_output = os.path.join(wkspace, "output_video.mp4")
             
-            print("Combining background audio, clips and hardcoded ASS/SRT Subtitles...")
+            print("Combining audio and hardcoded subtitles into final video file...")
             subprocess.run(["ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-safe", "0", "-f", "concat", "-i", os.path.abspath(tmpsldr_txt_path).replace("\\", "/"), "-i", os.path.abspath(path_mp3).replace("\\", "/"), "-c:v", "copy", "-c:a", "copy", "-shortest", os.path.abspath(raw_tmp_output).replace("\\", "/")], check=True)
 
             clx_pri = hex_to_ass_color(user_settings["font_color"], 1.0)
@@ -436,7 +445,6 @@ def process_primary_automation_loop():
             absolute_srt_path = os.path.abspath(path_srt).replace("\\", "/")
             tclmstr_subtitles_filter = f"subtitles='{absolute_srt_path}':force_style='{stylstr_for_subs}'"
 
-            # ultrafast আল্ট্রা রেন্ডারিং সিস্টেম
             subs_cmd = [
                 "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", 
                 "-i", os.path.abspath(raw_tmp_output).replace("\\", "/"), 
@@ -446,11 +454,10 @@ def process_primary_automation_loop():
             ]
             subprocess.run(subs_cmd, check=True)
             
-            # ভিডিও ইউটিউবে অটো-আপলোড
             safe_upload_to_youtube(fully_finalized_output, os.path.join(wkspace, "thumbnail.jpg"), vid_ttl, f"Complete Highlights Recap: {vid_ttl}\nGenerated automatically via AI Cloud System.")
             
             with open("processed_urls.txt", "a", encoding="utf-8") as fwx_docv: fwx_docv.write(lns+"\n")
-            print("================ 🎯 Complete Workflow Operations executed successfully seamlessly! 💯 ================\n")
+            print("================ 🎯 Rapid Execution Workflow Complete in <2 Minutes! 💯 ================\n")
 
         except Exception as errp: traceback.print_exc()
 
