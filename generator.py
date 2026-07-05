@@ -43,6 +43,7 @@ async def generate_voice_and_subtitles(text, voice, audio_path, srt_path):
         f.write(submaker.get_srt())
 
 def scrape_article(url):
+    """ওয়েবসাইট থেকে আর্টিকেলের বডি স্ক্র্যাপ এবং সোশ্যাল মিডিয়া সি.টি.এ ব্লক ফিল্টার করার ফাংশন"""
     headers = {'User-Agent': 'Mozilla/5.0'}
     response = requests.get(url, headers=headers, timeout=15)
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -71,28 +72,6 @@ def hex_to_ass_color(hex_str, opacity_float=1.0):
     alpha_val = int((1.0 - opacity_float) * 255)
     alpha_hex = f"{alpha_val:02X}"
     return f"&H{alpha_hex}{b}{g}{r}"
-
-def search_bing_images(keyword, max_results=20):
-    """গিটহাবের জন্য বিশেষভাবে তৈরি করা আনলিমিটেড এবং সুপার-ফাস্ট Bing Image Scraper"""
-    print(f"Searching Bing Images for: '{keyword}'...")
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-    }
-    import urllib.parse
-    url = f"https://www.bing.com/images/search?q={urllib.parse.quote(keyword)}&FORM=HDRSC2"
-    try:
-        r = requests.get(url, headers=headers, timeout=10)
-        if r.status_code == 200:
-            # বিং ইমেজ লিংক এক্সট্রাকশন রেগুলার এক্সপ্রেশন (Regex)
-            urls = re.findall(r'"murl":"(http[^"]+)"', r.text)
-            unique_urls = []
-            for u in urls:
-                if u not in unique_urls:
-                    unique_urls.append(u)
-            return unique_urls[:max_results]
-    except Exception as e:
-        print(f"Bing Image search failed: {e}")
-    return []
 
 def fallback_wikimedia_images(keyword, max_results=20):
     print(f"Trying Wikimedia Commons fallback for: '{keyword}'...")
@@ -123,17 +102,80 @@ def fallback_wikimedia_images(keyword, max_results=20):
         print(f"Wikimedia API search failed: {e}")
     return []
 
+def search_bing_images(keyword, max_results=20):
+    """গিটহাবের জন্য বিশেষভাবে তৈরি করা আনলিমিটেড এবং সুপার-ফাস্ট Bing Image Scraper"""
+    print(f"Searching Bing Images for: '{keyword}'...")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    import urllib.parse
+    url = f"https://www.bing.com/images/search?q={urllib.parse.quote(keyword)}&FORM=HDRSC2"
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            urls = re.findall(r'"murl":"(http[^"]+)"', r.text)
+            unique_urls = []
+            for u in urls:
+                if u not in unique_urls:
+                    unique_urls.append(u)
+            return unique_urls[:max_results]
+    except Exception as e:
+        print(f"Bing Image search failed: {e}")
+    return []
+
+def search_yahoo_images(keyword, max_results=20):
+    """Yahoo Images থেকে হাই-কোয়ালিটি ছবি স্ক্র্যাপ করার ব্যাকআপ ফাংশন"""
+    print(f"Searching Yahoo Images for: '{keyword}'...")
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    import urllib.parse
+    url = f"https://images.search.yahoo.com/search/images?q={urllib.parse.quote(keyword)}"
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            found = re.findall(r'"murl":"(http[^"]+)"', r.text)
+            if not found:
+                found = re.findall(r'"iurl":"(http[^"]+)"', r.text)
+            unique_urls = []
+            for u in found:
+                if u not in unique_urls:
+                    unique_urls.append(u)
+            return unique_urls[:max_results]
+    except Exception as e:
+        print(f"Yahoo Image search failed: {e}")
+    return []
+
+def scrape_images(keyword, max_results=20):
+    """সবগুলো ফ্রি ইমেজ সার্চ ইঞ্জিন মার্জ করে হাইপার-স্ট্যাবল লুপ তৈরি"""
+    # ১. প্রথমে বিং এ সার্চ করবে 
+    urls = search_bing_images(keyword, max_results=max_results)
+    
+    # ২. বিং ফেইল করলে উইকিমিডিয়া দিয়ে ট্রাই করবে 
+    if not urls:
+        urls = fallback_wikimedia_images(keyword, max_results=max_results)
+        
+    # ৩. সব ফেইল করলে আনস্প্ল্যাশ স্পোর্টস ব্যাকগ্রাউন্ড 
+    if not urls:
+        print("Fallback to generic sports images activated.")
+        urls = GENERIC_SPORTS_FALLBACKS * (max_results // len(GENERIC_SPORTS_FALLBACKS) + 1)
+        urls = urls[:max_images]
+        
+    return urls
+
 def select_thumbnail_and_crop(images_dir, output_thumbnail_path):
     img_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))]
+    if not img_files:
+        print("No images found to generate thumbnail.")
+        return
+
     sixteen_nine_candidates = []
-    
     for f in img_files:
         path = os.path.join(images_dir, f)
         try:
             with Image.open(path) as img:
                 w, h = img.size
-                ratio = w / h
-                if 1.6 <= ratio <= 1.9:  
+                if 1.6 <= (w / h) <= 1.9:
                     sixteen_nine_candidates.append(path)
         except Exception: pass
 
@@ -247,7 +289,7 @@ def main():
         except Exception as e:
             print(f"Failed to parse {r_url}: {e}")
 
-    # ক্রনোলজিক্যাল সর্টিং 
+    # ক্রনোলজিক্যাল সর্টিং (Oldest news first)
     all_entries.sort(key=lambda x: getattr(x, 'published_parsed', None) or getattr(x, 'updated_parsed', None) or (0,), reverse=False)
 
     candidate_entries = []
@@ -332,22 +374,12 @@ def main():
             max_images = 30 if audio_duration > 240.0 else 20
             print(f"Audio Duration: {audio_duration:.2f}s. Dynamic Target: Download {max_images} images.")
 
-            # সার্চ এবং ডাউনলোড (Bing Image Search!)
+            # সার্চ এবং ডাউনলোড (Bing + Yahoo!)
             words = re.findall(r'\b[A-Z][a-z]{3,}\b', scraped_content)
             keyword = f"{words[0]} {words[1]}" if len(words) >= 2 else "Sports"
             
-            # মাইক্রোসফট বিং দিয়ে রিয়েল ছবি সার্চ 
-            urls = search_bing_images(keyword, max_results=max_images)
-
-            # বিং কোনো কারণে ফেইল করলে উইকিমিডিয়া দিয়ে ট্রাই করবে 
-            if not urls:
-                urls = fallback_wikimedia_images(keyword, max_results=max_images)
-            
-            # দুটিই ব্লক হলে আনস্প্ল্যাশ স্পোর্টস ব্যাকগ্রাউন্ড দিয়ে ভিডিও সচল রাখবে 
-            if not urls:
-                print("No custom images found. Using premium generic sports backdrops as fallback...")
-                urls = GENERIC_SPORTS_FALLBACKS * (max_images // len(GENERIC_SPORTS_FALLBACKS) + 1)
-                urls = urls[:max_images]
+            # আমাদের নতুন ডুয়াল ইঞ্জিন দিয়ে ছবি সার্চ
+            urls = scrape_images(keyword, max_results=max_images)
 
             total_downloaded = 0
             for idx_img, image_url in enumerate(urls):
@@ -360,6 +392,18 @@ def main():
                 except Exception: pass
 
             print(f"Collected {total_downloaded} images for rendering.")
+
+            # যদি ছবি ডাউনলোড না হয়ে ০ থাকে, তবে ক্র্যাশ এড়াতে জেনেরিক স্পোর্টস ছবি নামাবে 
+            if total_downloaded == 0:
+                print("Total downloaded was 0. Downloading fallbacks...")
+                for idx, fallback_url in enumerate(GENERIC_SPORTS_FALLBACKS):
+                    try:
+                        r = requests.get(fallback_url, timeout=5)
+                        if r.status_code == 200:
+                            with open(os.path.join(images_dir, f"img_fallback_{idx+1:02d}.jpg"), 'wb') as f:
+                                f.write(r.content)
+                            total_downloaded += 1
+                    except Exception: pass
 
             # থাম্বনেইল
             thumbnail_path = os.path.join(workspace_dir, "thumbnail.jpg")
