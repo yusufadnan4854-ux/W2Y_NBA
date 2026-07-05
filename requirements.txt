@@ -2,11 +2,8 @@ customtkinter
 feedparser
 beautifulsoup4
 requests
-duckduckgo-search
 edge-tts
-numpy
 pillow
-moviepy
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
