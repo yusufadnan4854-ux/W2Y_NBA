@@ -91,9 +91,6 @@ def search_vercel_cloud_bridge(keyword):
     return []
 
 def search_bing_direct_photos(keyword, max_results=20):
-    """
-    0.3 সেকেন্ডে আনব্লকড পাইথন রিয়েল অন পপ সিডিএন মিডিয়া ইমেজেস এক্সট্র্যাক্টর 
-    """
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/126.0.0.0 Safari/537.36'}
         url = f"https://www.bing.com/images/async?q={urllib.parse.quote(keyword + ' NBA basketball')}&first=1&count=25"
@@ -141,15 +138,12 @@ def scrape_images_strictly_web(title, body_text, embedded_photos):
         
     subject = get_primary_keyword_app_logic(body_text)
 
-    #১. Vercel ক্লাউড প্রক্সি
     vercel_pics = search_vercel_cloud_bridge(subject)
     candidates.extend(vercel_pics)
 
-    #২. অরিজিনাল ০.৩ সেকেন্ড পাইথন সিডিএন ফটো কানেক্টর
     direct_pics = search_bing_direct_photos(subject, max_results=20)
     candidates.extend(direct_pics)
 
-    #৩. উইকিমিডিয়া পাবলিক ওপেন কভার
     if len(candidates) < 8:
         wiki_pics = search_wikimedia_images(subject, max_results=15)
         candidates.extend(wiki_pics)
@@ -465,13 +459,14 @@ def process_primary_automation_loop():
             lines_for_slider_doc = []
             print(f"Rendering {total_n_segments} unique video clip scenes matching individual sentence audio using FFmpeg...")
 
+            # সঠিক নাম ফিক্সিং: output_segment_path ডিক্লারেশন সেশন 
             with ThreadPoolExecutor(max_workers=os.cpu_count() or 2) as thex:
                 rendered_segment_tasks = []
                 for sg_ix in range(total_n_segments):
                     s_gap = sentence_timers[sg_ix+1] - sentence_timers[sg_ix]
                     if s_gap <= 0: continue
                     img_f = os.path.join(targ_pcdir, pil_rendered_list[sg_ix % len(pil_rendered_list)])
-                    output_v_frag = os.path.join(targ_vfrmdir, f"seg_{sg_ix:04d}.mp4")
+                    output_segment_path = os.path.join(targ_vfrmdir, f"seg_{sg_ix:04d}.mp4")
                     rendered_segment_tasks.append(thex.submit(render_zoom_segment_by_ffmpeg, sg_ix, s_gap, img_f, output_segment_path))
                     
                 for task_obj in rendered_segment_tasks: 
