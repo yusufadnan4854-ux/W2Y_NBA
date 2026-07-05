@@ -13,9 +13,14 @@ from PIL import Image, ImageFilter
 from concurrent.futures import ThreadPoolExecutor
 import feedparser  
 import edge_tts
-from duckduckgo_search import DDGS  
 
-# জেনেরিক বাস্কেটবল ও স্টেডিয়াম ব্যাকগ্রাউন্ড
+try:
+    from moviepy import ImageClip
+    MOVIEPY_V2 = True
+except ImportError:
+    from moviepy.editor import ImageClip
+    MOVIEPY_V2 = False
+
 GENERIC_SPORTS_FALLBACKS = [
     "https://images.unsplash.com/photo-1546519638-68e109498ffc?w=1920&q=80",  
     "https://images.unsplash.com/photo-1519766304817-4f37bda74a27?w=1920&q=80",  
@@ -37,7 +42,6 @@ async def generate_voice_and_subtitles(text, voice, audio_path, srt_path):
         f.write(submaker.get_srt())
 
 def scrape_article(url):
-    """বিজ্ঞাপন ও অপ্রাসঙ্গিক ফলোয়ার ব্লক মুছে মেইন লেখা নিয়ে আসা"""
     headers = {'User-Agent': 'Mozilla/5.0'}
     response = requests.get(url, headers=headers, timeout=15)
     soup = BeautifulSoup(response.text, 'html.parser')
@@ -65,33 +69,89 @@ def get_audio_duration(audio_path):
         return float(result.stdout.strip())
     except: return 0.0
 
-def scrape_real_images_from_search(keyword, max_results=20):
-    """DDGS লাইব্রেরির সতর্কবার্তাকে ডাইজেস্ট করে একদম ফ্রেশ ছবি নামানোর ফ্লেক্সিবল ফাংশন"""
-    import logging
-    import warnings
-    logging.getLogger('duckduckgo_search').setLevel(logging.ERROR)
-    warnings.filterwarnings('ignore', module='duckduckgo_search')
-
-    print(f"Extracting valid subject HD graphics covertly tracking specifically for: '{keyword}'...")
-    image_urls = []
+# 🌟 গুগলের অফিশিয়াল ইমেজ সার্চ এপিআই (Google Custom Search API - No blocks, maximum relevant results!)
+def search_google_images(keyword, max_results=20):
+    api_key = os.environ.get("GOOGLE_API_KEY")
+    cse_id = os.environ.get("GOOGLE_CSE_ID")
     
-    try:
-        search_engine = DDGS().images(keywords=keyword, max_results=max_results)
-        for data in search_engine:
-            img = data.get("image")
-            if img: image_urls.append(img)
-    except Exception as e:
-        print(f"Original DB logic network threshold hit! Applying dynamic internal proxy block... Error Info: {e}")
-        pass
-
-    # স্পোর্টস ফোল্ডার ফলব্যাক (ক্র্যাশ ব্লকড রুলস) 
-    if len(image_urls) == 0:
-        print("Empty search pool found, passing premium default resolution arrays over bounds ensuring complete execution!")
-        image_urls = GENERIC_SPORTS_FALLBACKS * ((max_results // len(GENERIC_SPORTS_FALLBACKS)) + 1)
+    if not api_key or not cse_id:
+        print("Google CSE credentials missing. Shifting to alternative engines.")
+        return []
         
-    # ডুপ্লিকেট সরানো
-    safe_img_arr = list(dict.fromkeys(image_urls))
-    return safe_img_arr[:max_results]
+    print(f"Searching Google Images for: '{keyword}'...")
+    url = "https://www.googleapis.com/customsearch/v1"
+    
+    urls = []
+    try:
+        # ১ম ১০টি ছবি সার্চ 
+        params = {
+            "key": api_key,
+            "cx": cse_id,
+            "q": keyword,
+            "searchType": "image",
+            "num": min(max_results, 10),
+            "imgSize": "large"
+        }
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            items = r.json().get("items", [])
+            urls.extend([item.get("link") for item in items if item.get("link")])
+            
+        # ২য় ১০টি ছবি সার্চ (প্রয়োজন হলে)
+        if max_results > 10 and len(urls) >= 10:
+            params["start"] = 11
+            params["num"] = min(max_results - 10, 10)
+            r = requests.get(url, params=params, timeout=10)
+            if r.status_code == 200:
+                items = r.json().get("items", [])
+                urls.extend([item.get("link") for item in items if item.get("link")])
+                
+        print(f"Google Images successfully extracted {len(urls)} target resources.")
+        return urls
+    except Exception as e:
+        print(f"Google Image Search failed: {e}")
+    return []
+
+def search_bing_images_fallback(keyword, max_results=20):
+    headers = {"User-Agent": "Mozilla/5.0"}
+    url = f"https://www.bing.com/images/search?q={urllib.parse.quote(keyword)}&FORM=HDRSC2"
+    try:
+        r = requests.get(url, headers=headers, timeout=10)
+        if r.status_code == 200:
+            urls = re.findall(r'"murl":"(http[^"]+)"', r.text)
+            unique_urls = list(dict.fromkeys(urls))
+            return unique_urls[:max_results]
+    except: pass
+    return []
+
+def fallback_wikimedia_images(keyword, max_results=20):
+    try:
+        url = "https://commons.wikimedia.org/w/api.php"
+        params = {
+            "action": "query", "format": "json", "generator": "search",
+            "gsrsearch": f"filetype:bitmap {keyword}", "gsrlimit": max_results,
+            "prop": "imageinfo", "iiprop": "url"
+        }
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            pages = r.json().get("query", {}).get("pages", {})
+            return [p["imageinfo"][0]["url"] for p in pages.values() if p.get("imageinfo")]
+    except: pass
+    return []
+
+def scrape_images(keyword, max_results=20):
+    # ১. প্রথমে অফিশিয়াল গুগল ইমেজ দিয়ে ট্রাই করবে (সেরা কোয়ালিটি ও নো-ব্লক গ্যারান্টি)
+    urls = search_google_images(keyword, max_results=max_results)
+    
+    # ২. গুগল এপিআই কি না থাকলে বা লিমিট শেষ হলে বিং ইমেজ ট্রাই করবে 
+    if not urls:
+        urls = search_bing_images_fallback(keyword, max_results=max_results)
+        
+    # ৩. বিং ফেইল করলে উইকিমিডিয়া কমন্স দিয়ে ট্রাই করবে 
+    if not urls:
+        urls = fallback_wikimedia_images(keyword, max_results=max_results)
+        
+    return urls
 
 def process_dynamic_thumbnail(images_dir, output_path):
     all_files = [f for f in os.listdir(images_dir) if f.lower().endswith(('.jpg','.jpeg','.png'))]
@@ -108,10 +168,8 @@ def process_dynamic_thumbnail(images_dir, output_path):
     try:
         if wide_images:
             Image.open(random.choice(wide_images)).convert("RGB").resize((1920,1080)).save(output_path, quality=95)
-            print("Thumbnail ratio explicitly optimized and built valid.")
         else:
             Image.open(os.path.join(images_dir, random.choice(all_files))).convert("RGB").resize((1920,1080)).save(output_path, quality=95)
-            print("Target fallback format optimized and published effectively!")
     except: pass
 
 def clear_temporary_workspace(ws_dir):
@@ -128,7 +186,6 @@ def clear_temporary_workspace(ws_dir):
     except: pass
 
 def render_zoom_segment_by_ffmpeg(clip_index, segment_duration, input_img_path, output_segment_path):
-    """এটি কোনো মুভিপাই ছাড়াই সম্পূর্ণ মাল্টিথ্রেডেড সিপিইউ ইঞ্জিন কাজে লাগিয়ে লিনাক্সে ১-২ সেকেন্ডে পারফেক্ট সিনেমাটিক প্যানিং ট্রানজিশন ক্লিপ তৈরি করবে"""
     frame_count = int(segment_duration * 30)
     
     effect_style = clip_index % 3
@@ -147,7 +204,7 @@ def render_zoom_segment_by_ffmpeg(clip_index, segment_duration, input_img_path, 
     ]
     
     subprocess.run(cmd_arguments, check=True)
-    return output_segment_path  # Absolute path returned safely
+    return output_segment_path
 
 def get_sentence_timestamps(srt_path):
     if not os.path.exists(srt_path): return []
@@ -186,7 +243,6 @@ def safe_upload_to_youtube(video_full_path, thumb_full_path, title, video_descri
 
 
 def process_primary_automation_loop():
-    # সেটিং চেকার 
     if not os.path.exists("config.json"): return
     with open("config.json", "r", encoding="utf-8") as cf: user_settings = json.load(cf)
 
@@ -197,7 +253,6 @@ def process_primary_automation_loop():
     collected_feeds, dt_utcnow = [], datetime.datetime.now(datetime.timezone.utc)
     target_urls_parsed = [x.strip() for x in user_settings["rss_urls"].split(",") if x.strip()]
     
-    # 1. সব সোর্স স্ক্যান করে লিনিয়ার এন্ট্রিতে পরিণত 
     for rss_path in target_urls_parsed:
         try:
             p_feed = feedparser.parse(rss_path)
@@ -206,7 +261,6 @@ def process_primary_automation_loop():
                 collected_feeds.append(p_obj)
         except: pass
 
-    # পুরানো টাইমে শর্ট 
     collected_feeds.sort(key=lambda sxy: getattr(sxy, 'published_parsed', None) or getattr(sxy, 'updated_parsed', None) or (0,), reverse=False)
 
     filter_excluded_title = [xtr.strip().lower() for xtr in user_settings["exclude_title_keywords"].split(",") if xtr.strip()]
@@ -231,7 +285,6 @@ def process_primary_automation_loop():
         actual_calendar_data = getattr(fitem, "published_parsed", getattr(fitem, "updated_parsed", None))
         
         if not actual_calendar_data and not draft_priority: continue
-        
         diff_tracker = (dt_utcnow - datetime.datetime(*actual_calendar_data[:6], tzinfo=datetime.timezone.utc)).total_seconds() / 3600.0 if actual_calendar_data else 0.0
         if time_limit_scale_hrs < 9999.0 and not draft_priority and diff_tracker > time_limit_scale_hrs: 
             continue
@@ -242,7 +295,6 @@ def process_primary_automation_loop():
         print("Completed database scraping securely. Scheduled task waiting.")
         return
 
-    # === Directory Constants absolute safe paths === 
     wkspace = os.path.abspath(os.path.join(os.getcwd(), 'workspace'))
     target_imgdir = os.path.join(wkspace, 'images')
     targ_pcdir = os.path.join(wkspace, 'processed_frames')
@@ -251,7 +303,6 @@ def process_primary_automation_loop():
     blocked_inside_words = [bk.strip().lower() for bk in user_settings["exclude_body_keywords"].split(",") if bk.strip()]
     require_wc = user_settings.get("min_word_count", 150)
 
-    # 3. এক এক করে ভিডিও তৈরি ও সিকুয়েনশিয়াল রেন্ডারিং শুরু 
     for track_loop_counter, finalizer_target in enumerate(final_action_items):
         vid_ttl, lns = finalizer_target.get("title", ""), finalizer_target.get("link", "")
         print(f"\n[{track_loop_counter+1}/{len(final_action_items)}] Valid Target Found: >> {vid_ttl}")
@@ -287,10 +338,11 @@ def process_primary_automation_loop():
 
             first_subject_arrays = re.findall(r'\b[A-Z][a-z]{3,}\b', text_chunk_collected)
             active_smart_lookup_word = f"{first_subject_arrays[0]} {first_subject_arrays[1]}" if len(first_subject_arrays) >= 2 else "Sports match highlights action field"
-            raw_unlinked_pic_pointers = scrape_real_images_from_search(active_smart_lookup_word, max_results=pics_limit_range)
+            
+            raw_unlinked_pic_pointers = scrape_images(active_smart_lookup_word, max_results=pics_limit_range)
 
             succesfully_got_downloads = 0
-            for dxix, purelink in enumerate(raw_unlinked_pic_pointers):
+            for purelink in raw_unlinked_pic_pointers:
                 try:
                     rd_dt_rsv = requests.get(purelink, timeout=5)
                     if rd_dt_rsv.status_code == 200:
@@ -301,9 +353,9 @@ def process_primary_automation_loop():
 
             dflocst = sorted([pzbv for pzbv in os.listdir(target_imgdir) if pzbv.endswith(('.jpg','.jpeg','.png'))])
             if not dflocst: 
-                print("Missing total graphical assets globally interrupting frame renders precisely aborting current target smoothly... "); continue
+                print("Missing total graphical assets globally. Skipping current target... "); continue
 
-            print("Constructing display layout aspects mapping accurately handling dimensions over 16:9 1080p full configurations directly over Python Pil filters efficiently natively protecting CPUs...")
+            print("Constructing display layout aspects mapping accurately handling dimensions over 16:9 1080p full configurations...")
             process_dynamic_thumbnail(target_imgdir, os.path.join(wkspace, "thumbnail.jpg"))
 
             for p_file in dflocst:
@@ -341,7 +393,6 @@ def process_primary_automation_loop():
 
             lines_for_slider_doc = []
             
-            # থ্রেড এক্সিকিউশন ও হার্ডওয়্যার অপ্টিমাইজড জেনারেটর (No 24hrs timeouts)
             print(f"Assigning Fast Direct Encoding Native Modules building completely cleanly perfectly over core engines logically...")
 
             with ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as thex:
@@ -353,7 +404,6 @@ def process_primary_automation_loop():
                     rendered_segment_tasks.append(thex.submit(render_zoom_segment_by_ffmpeg, sg_ix, s_gap, img_f, output_v_frag))
                     
                 for task_obj in rendered_segment_tasks: 
-                    # f-string এর ভেতর backslash এড়াতে বাইরে ভ্যারিয়েবল ডিক্লেয়ার করা হলো (Python < 3.12 syntax limitation bypassed!)
                     absolute_clip_path = os.path.abspath(task_obj.result()).replace("\\", "/")
                     lines_for_slider_doc.append(f"file '{absolute_clip_path}'")
 
@@ -363,7 +413,7 @@ def process_primary_automation_loop():
             raw_tmp_output = os.path.join(wkspace, "temp_output.mp4")
             fully_finalized_output = os.path.join(wkspace, "output_video.mp4")
             
-            print("Mixing layers completely perfectly safe bypassing block issues dynamically integrating timeline...")
+            print("Mixing layers completely perfectly safe bypassing block issues dynamically...")
             subprocess.run(["ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-safe", "0", "-f", "concat", "-i", os.path.abspath(tmpsldr_txt_path).replace("\\", "/"), "-i", os.path.abspath(path_mp3).replace("\\", "/"), "-c:v", "copy", "-c:a", "copy", "-shortest", os.path.abspath(raw_tmp_output).replace("\\", "/")], check=True)
 
             clx_pri = hex_to_ass_color(user_settings["font_color"], 1.0)
@@ -374,7 +424,6 @@ def process_primary_automation_loop():
             absolute_srt_path = os.path.abspath(path_srt).replace("\\", "/")
             tclmstr_subtitles_filter = f"subtitles='{absolute_srt_path}':force_style='{stylstr_for_subs}'"
 
-            # FFmpeg Command Array is safely updated now (No SyntaxErrors!)
             subs_cmd = [
                 "ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", 
                 "-i", os.path.abspath(raw_tmp_output).replace("\\", "/"), 
