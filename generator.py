@@ -640,7 +640,7 @@ def process_primary_automation_loop():
 
                 clx_pri = hex_to_ass_color(user_settings["font_color"], 1.0)
                 clx_bkg = hex_to_ass_color(user_settings["bg_color"], user_settings.get("bg_opacity", 0.6))
-                stylstr_for_subs = f"FontName=Arial,FontSize={user_settings['font_size']},PrimaryColour={clx_pri},BackColour={clx_bkg},BorderStyle={user_settings['border_style']},Outline=2,Shadow=1,Alignment=2,MarginV={user_settings['margin_v']}"
+                stylstr_for_subs = f"FontName=Arial,FontSize={user_settings['font_size']},PrimaryColour={clx_pri},OutlineColour={clx_bkg},BackColour={clx_bkg},BorderStyle={user_settings['border_style']},Outline=2,Shadow=1,Alignment=2,MarginV={user_settings['margin_v']}"
 
                 safe_srt_path = os.path.relpath(path_srt).replace("\\", "/").replace("'", "'\\''")
                 tclmstr_subtitles_filter = f"subtitles='{safe_srt_path}':force_style='{stylstr_for_subs}'"
@@ -805,7 +805,7 @@ def process_primary_automation_loop():
 
                     clx_pri = hex_to_ass_color(user_settings["font_color"], 1.0)
                     clx_bkg = hex_to_ass_color(user_settings["bg_color"], user_settings.get("bg_opacity", 0.6))
-                    stylstr_for_subs = f"FontName=Arial,FontSize={user_settings['font_size']},PrimaryColour={clx_pri},BackColour={clx_bkg},BorderStyle={user_settings['border_style']},Outline=2,Shadow=1,Alignment=2,MarginV={user_settings['margin_v']}"
+                    stylstr_for_subs = f"FontName=Arial,FontSize={user_settings['font_size']},PrimaryColour={clx_pri},OutlineColour={clx_bkg},BackColour={clx_bkg},BorderStyle={user_settings['border_style']},Outline=2,Shadow=1,Alignment=2,MarginV={user_settings['margin_v']}"
 
                     safe_srt_path = os.path.relpath(path_srt_grp).replace("\\", "/").replace("'", "'\\''")
                     tclmstr_subtitles_filter = f"subtitles='{safe_srt_path}':force_style='{stylstr_for_subs}'"
