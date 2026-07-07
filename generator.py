@@ -94,12 +94,10 @@ def group_paragraphs(paragraphs, min_words=80):
     return groups
 
 def get_primary_keyword_app_logic(text):
-    # ১. নাম চেনার সিস্টেম (Name Recognition) - পাশাপাশি বড় হাতের একাধিক শব্দ সনাক্তকরণ
     proper_nouns = re.findall(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+\b', text)
     
-    # ক্রীড়াক্ষেত্রের কমন স্থান ও নন-প্লেয়ার ফ্রেজ যা খেলোয়াড়ের নাম নয়
     stop_phrases = {
-        'bay area', 'golden state', 'los angeles', 'san francisco', 'summer league', 
+        'bay area', 'golden state', 'los angeles', 'san francisco', 
         'free agency', 'daily slop', 'sports news', 'latest news', 'mmb lounge',
         'las vegas', 'new york', 'green bay', 'st louis', 'north', 'south', 'east', 'west',
         'g league', 'summer league', 'nba free', 'free agent',
@@ -111,7 +109,6 @@ def get_primary_keyword_app_logic(text):
     for pn in proper_nouns:
         pn_clean = pn.strip()
         words_count = len(pn_clean.split())
-        # মানুষের নাম সাধারণত ২ বা ৩ শব্দের হয়ে থাকে (যেমন: LeBron James, Anthony Davis)
         if 2 <= words_count <= 3:
             if pn_clean.lower() not in stop_phrases:
                 valid_names.append(pn_clean)
@@ -121,7 +118,6 @@ def get_primary_keyword_app_logic(text):
         print(f"👤 [Name Recognition] Primary subject detected as player/person: '{most_common_name}'")
         return most_common_name
 
-    # ২. অটো-ফলব্যাক লজিক (মানুষের নাম না পাওয়া গেলে পূর্বের কিওয়ার্ড ফ্রিকোয়েন্সি লজিক চলবে)
     words = re.findall(r'\b[A-Z][a-z]{3,}\b', text) 
     if len(words) < 2:
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
@@ -205,17 +201,14 @@ def scrape_images_strictly_web(title, body_text, embedded_photos, num_images_nee
         
     subject = get_primary_keyword_app_logic(body_text)
 
-    # ১ম প্রায়োরিটি: ডাকডাকগো (ভারসেল ক্লাউড ব্রিজের মাধ্যমে)
     ddg_pics = search_vercel_cloud_bridge(subject, engine="ddg")
     candidates.extend(ddg_pics)
     candidates = list(dict.fromkeys(candidates))
 
-    # ডাকডাকগো থেকে পর্যাপ্ত ছবি পাওয়া গেলে অন্য কোনো সোর্সে সার্চ করা হবে না
     if len(candidates) >= num_images_needed:
         print(f"🎯 [Smart Stopping] DuckDuckGo delivered {len(candidates)} images which meets the target of {num_images_needed}. Skipping other sources.")
         return candidates
 
-    # ২য় প্রায়োরিটি: বিং ইমেজ সার্চ (ভারসেল ক্লাউড ব্রিজের মাধ্যমে)
     bing_pics = search_vercel_cloud_bridge(subject, engine="bing")
     candidates.extend(bing_pics)
     candidates = list(dict.fromkeys(candidates))
@@ -223,12 +216,10 @@ def scrape_images_strictly_web(title, body_text, embedded_photos, num_images_nee
     if len(candidates) >= num_images_needed:
         return candidates
 
-    # ৩য় প্রায়োরিটি: উইকিমিডিয়া কমন্স (ভারসেল ক্লাউড ব্রিজের মাধ্যমে)
     wiki_pics = search_vercel_cloud_bridge(subject, engine="wiki")
     candidates.extend(wiki_pics)
     candidates = list(dict.fromkeys(candidates))
 
-    # ডিরেক্ট সোর্স ব্যাকআপ ফিল্টার (যদি এপিআই কোনো রেসপন্স না দেয় বা অফলাইন থাকে)
     if len(candidates) < 8:
         direct_pics = search_bing_direct_photos(subject, max_results=20)
         candidates.extend(direct_pics)
@@ -241,7 +232,6 @@ def scrape_images_strictly_web(title, body_text, embedded_photos, num_images_nee
     return list(dict.fromkeys(candidates))
 
 def filter_and_clean_downloaded_images(images_dir):
-    # ব্যবহারকারীর রিকোয়েস্ট অনুযায়ী ঝাপসা ও লোগো ফিল্টার করার প্রসেস সম্পূর্ণ বাদ দেওয়া হলো
     print("🧹 [Dynamic Smart Cleaner] Disabled as per user request. Retaining all downloaded photos.")
 
 def process_dynamic_thumbnail(wkspace, output_path):
@@ -270,7 +260,6 @@ def process_dynamic_thumbnail(wkspace, output_path):
 
 def clear_temporary_workspace(ws_dir):
     try:
-        # প্যারেন্ট ডিরেক্টরি বা ফোল্ডারটি রানারে তৈরি হওয়া নিশ্চিত করা হলো
         os.makedirs(ws_dir, exist_ok=True)
         
         for fname in ["audio.mp3", "subtitles.srt", "temp_slider.txt", "temp_output.mp4", "output_video.mp4", "thumbnail.jpg", "final_concat.txt"]:
@@ -284,12 +273,10 @@ def clear_temporary_workspace(ws_dir):
     except: pass
 
 def render_segment_by_ffmpeg(clip_index, segment_duration, img_obj, output_segment_path):
-    # ভিডিও ৩০ এফপিএস-এ উন্নীত করা হয়েছে
     frame_count = max(int(segment_duration * 30), 10)
     
     if img_obj["type"] == "landscape":
         step_str = f"{0.15 / frame_count:.6f}"
-        # কাপাকাপি বাগ দূর করতে 4K জুম মেথড এবং ব্যাক টু ১০৮০p ট্রিকস প্রয়োগ
         if clip_index % 2 == 0:
             lens_filter = f"scale=3840x2160,zoompan=z='min(1.15, zoom+{step_str})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frame_count}:s=3840x2160:fps=30,scale=1920x1080"
         else:
@@ -337,7 +324,6 @@ def mix_sfx_to_audio(audio_path, timestamps, sfx_folder, sfx_volume, output_audi
     cmd = ["ffmpeg", "-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-i", audio_path]
     filter_inputs = []
     
-    # প্রথম ফ্রেম এবং একদম শেষ বাউন্ডারি বাদ দিয়ে ট্রানজিশন সাউন্ড প্লে করার লজিক
     valid_ts = [t for t in timestamps[1:-1] if t > 0.1]
     
     for idx, ts in enumerate(valid_ts):
@@ -410,36 +396,12 @@ def get_audio_duration(audio_path):
         return float(result.stdout.strip())
     except: return 0.0
 
-def extract_title_from_url(url):
-    try:
-        # ইউআরএল পাথ থেকে ক্যাটাগরি ও স্লাগ আলাদা করা
-        parsed = urllib.parse.urlparse(url)
-        path = parsed.path.strip("/")
-        
-        segments = [s for s in path.split("/") if s.strip()]
-        if not segments:
-            return ""
-        last_segment = segments[-1]
-        
-        # ফাইলের এক্সটেনশন যেমন .html, .htm, .php থাকলে ছেঁটে ফেলা
-        last_segment = re.sub(r'\.(html|htm|php|aspx|asp)$', '', last_segment, flags=re.IGNORECASE)
-        
-        # টাইটেলের শেষের ট্রেইলিং সংখ্যা (যেমন আইডি নম্বর '-035022849') মুছে ফেলা
-        last_segment = re.sub(r'-[0-9]+$', '', last_segment)
-        
-        # ড্যাশ বা আন্ডারস্কোর তুলে দিয়ে প্রতিটি শব্দ স্পেস দিয়ে আলাদা করা
-        raw_title = last_segment.replace("-", " ").replace("_", " ").strip()
-        
-        # প্রফেশনাল টাইটেল কেসে কনভার্ট করা (যেমন: LeBron James Cavaliers)
-        cleaned_title = raw_title.title()
-        
-        # টাইটেলটি যদি অতি ক্ষুদ্র বা সম্পূর্ণ সংখ্যা হয় তবে খালি রিটার্ন করবে ফলব্যাকের জন্য
-        if len(cleaned_title) < 8 or cleaned_title.isdigit():
-            return ""
-            
-        return cleaned_title
-    except:
-        return ""
+def escape_subtitles_path(path_str):
+    escaped = os.path.abspath(path_str).replace("\\", "/")
+    if ":" in escaped:
+        drive, rest = escaped.split(":", 1)
+        escaped = f"{drive}\\:{rest}"
+    return escaped
 
 def process_primary_automation_loop():
     if not os.path.exists("config.json"): return
@@ -502,6 +464,23 @@ def process_primary_automation_loop():
 
     for track_loop_counter, finalizer_target in enumerate(final_action_items):
         vid_ttl, lns = finalizer_target.get("title", ""), finalizer_target.get("link", "")
+        
+        # টাইটেল সংক্রান্ত সমস্যা সমাধানের অংশ (খালি অথবা "unknown" টাইটেল পেলে লিংক থেকে উদ্ধার করবে)
+        vid_ttl = str(vid_ttl).strip()
+        if not vid_ttl or vid_ttl.lower() == "unknown":
+            try:
+                parsed_path = urllib.parse.urlparse(lns).path
+                path_segments = [p for p in parsed_path.split('/') if p.strip()]
+                if path_segments:
+                    slug_string = re.sub(r'\.[a-zA-Z0-9]+$', '', path_segments[-1])
+                    vid_ttl = slug_string.replace('-', ' ').replace('_', ' ').strip().title()
+                
+                # যদি এরপরও টাইটেল খালি আসে 
+                if not vid_ttl:
+                    vid_ttl = "NBA Latest News Update"
+            except Exception:
+                vid_ttl = "NBA Latest News Update"
+
         print(f"\n=========================================================================")
         print(f"[{track_loop_counter+1}/{len(final_action_items)}] Processing Target Article: >> {vid_ttl}")
         print(f"=========================================================================")
@@ -523,11 +502,9 @@ def process_primary_automation_loop():
         clear_temporary_workspace(wkspace)
 
         try:
-            # গিটহাব রানার ও উইন্ডোজে ক্র্যাশ এড়াতে পাথ এলাইনমেন্ট
             path_mp3 = os.path.join(wkspace, "audio.mp3")
             path_srt = os.path.join(wkspace, "subtitles.srt")
             
-            # অডিও ডিউরেশনের ওপর ভিত্তি করে ডাইনামিক রেন্ডার ডিসিশন নেওয়ার জন্য শুরুতেই টোটাল ভয়েস জেনারেট করা হলো
             print("Encoding Edge-TTS Audio and generating SRT timing anchors...")
             asyncio.run(generate_voice_and_subtitles(text_chunk_collected, user_settings["voice"], path_mp3, path_srt))
             calc_tlength = get_audio_duration(path_mp3)
@@ -537,23 +514,10 @@ def process_primary_automation_loop():
             raw_paras = text_chunk_collected.split("\n\n")
             raw_paras = [p.strip() for p in raw_paras if p.strip()]
 
-            # পুরো আর্টিকেলের একটি মূল গ্লোবাল বিষয়বস্তু (NBA/SpaceX/Golf ইত্যাদি নির্বিশেষে নিরপেক্ষ) ডিটেক্ট করা হলো
-            global_subject = get_primary_keyword_app_logic(text_chunk_collected)
-
-            # আরএসএস ফিডে টাইটেল না থাকলে, প্রথমে স্লাগ বা লিংক থেকে ডাইনামিক টাইটেল রিকভারি করা হবে
-            if not vid_ttl.strip():
-                extracted_ttl = extract_title_from_url(lns)
-                if extracted_ttl:
-                    vid_ttl = extracted_ttl
-                    print(f"✍️ [Title Recovery] Recovered title from URL slug: '{vid_ttl}'")
-                else:
-                    # লিংক থেকে না পাওয়া গেলে খেলোয়াড় বা মূল বিষয়ের নাম দিয়ে প্রফেশনাল টাইটেল তৈরি হবে
-                    vid_ttl = f"{global_subject} - Latest Highlights & Update"
-                    print(f"✍️ [Title Recovery] Generated dynamic title from global subject: '{vid_ttl}'")
-
-            # কন্ডিশন ১: ভিডিওর দৈর্ঘ্য ৫ মিনিটের কম হলে (300 সেকেন্ডের নিচে)
             if calc_tlength < 300.0:
                 print("🟢 Video duration < 5 mins. Processing as a single unified timeline...")
+                
+                global_subject = get_primary_keyword_app_logic(text_chunk_collected)
                 
                 images_dir = os.path.join(wkspace, "images")
                 targ_pcdir = os.path.join(wkspace, 'processed_frames')
@@ -573,11 +537,9 @@ def process_primary_automation_loop():
                     sentence_timers.append(calc_tlength)
                 total_n_segments = len(sentence_timers) - 1
 
-                # প্রতিটি সেন্টেন্সে ছবি চেঞ্জ করার জন্য ডিউরেশন ভিত্তিক ডাইনামিক ডাউনলোড লিমিট
                 num_images_to_download = max(2, min(40, total_n_segments))
                 print(f"📥 Length-based download target: downloading {num_images_to_download} images for {total_n_segments} sentences.")
 
-                # গ্লোবাল সাবজেক্ট সার্চ
                 candidate_image_urls = scrape_images_strictly_web(vid_ttl, text_chunk_collected, embedded_page_photos, num_images_needed=num_images_to_download)
 
                 successfully_got_downloads = 0
@@ -699,7 +661,6 @@ def process_primary_automation_loop():
                 
                 rendered_paragraph_videos.append(para_final_output)
 
-            # কন্ডিশন ২: ভিডিওর দৈর্ঘ্য ৫ মিনিটের বেশি হলে (300 সেকেন্ডের বেশি)
             else:
                 print("🔵 Video duration >= 5 mins. Grouping every 3 paragraphs as 1 consolidated cluster...")
                 
@@ -724,7 +685,6 @@ def process_primary_automation_loop():
                     path_mp3_grp = os.path.join(para_ws, f"voice_{idx}.mp3")
                     path_srt_grp = os.path.join(para_ws, f"subtitles_{idx}.srt")
                     
-                    # প্রতিটি ৩-প্যারাগ্রাফ ক্লাস্টারের জন্য অডিও জেনারেশন
                     asyncio.run(generate_voice_and_subtitles(grp_text, user_settings["voice"], path_mp3_grp, path_srt_grp))
                     calc_tlength_grp = get_audio_duration(path_mp3_grp)
 
@@ -739,11 +699,9 @@ def process_primary_automation_loop():
                         sentence_timers.append(calc_tlength_grp)
                     total_n_segments = len(sentence_timers) - 1
 
-                    # প্রতিটি সেগমেন্টে ছবি চেঞ্জ করার জন্য ডিউরেশন ভিত্তিক ডাউনলোড লিমিট
                     num_images_to_download = max(2, min(30, total_n_segments))
                     print(f"📥 Cluster download target: downloading {num_images_to_download} images for {total_n_segments} sentences.")
 
-                    # ৩টি প্যারাগ্রাফের টেক্সট থেকে একটিমাত্র কীওয়ার্ড বের করে গ্লোবাল লকিং ট্যাগসহ সার্চ
                     grp_keyword = get_primary_keyword_app_logic(grp_text)
                     candidate_image_urls = scrape_images_strictly_web(vid_ttl, grp_text, embedded_page_photos, num_images_needed=num_images_to_download)
 
@@ -853,7 +811,6 @@ def process_primary_automation_loop():
                     clx_bkg = hex_to_ass_color(user_settings["bg_color"], user_settings.get("bg_opacity", 0.5))
                     stylstr_for_subs = f"FontName=Arial,FontSize={user_settings['font_size']},PrimaryColour={clx_pri},BackColour={clx_bkg},BorderStyle={user_settings['border_style']},Outline=2,Shadow=1,Alignment=2,MarginV={user_settings['margin_v']}"
 
-                    # আপেক্ষিক পাথ (Relative Path) ডিক্লারেশন সেশন
                     safe_srt_path = os.path.relpath(path_srt_grp).replace("\\", "/").replace("'", "'\\''")
                     tclmstr_subtitles_filter = f"subtitles='{safe_srt_path}':force_style='{stylstr_for_subs}'"
 
