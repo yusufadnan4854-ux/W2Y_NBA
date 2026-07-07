@@ -93,46 +93,25 @@ def group_paragraphs(paragraphs, min_words=80):
             
     return groups
 
+# --- আপডেটেড সিম্পল কি-ওয়ার্ড মেথড (কম্পিউটার সফটওয়্যার থেকে সংগৃহীত) ---
 def get_primary_keyword_app_logic(text):
-    proper_nouns = re.findall(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)+\b', text)
-    
-    stop_phrases = {
-        'bay area', 'golden state', 'los angeles', 'san francisco', 
-        'free agency', 'daily slop', 'sports news', 'latest news', 'mmb lounge',
-        'las vegas', 'new york', 'green bay', 'st louis', 'north', 'south', 'east', 'west',
-        'g league', 'summer league', 'nba free', 'free agent',
-        'january', 'february', 'march', 'april', 'may', 'june', 'july', 'august', 'september', 'october', 'november', 'december',
-        'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'
-    }
-    
-    valid_names = []
-    for pn in proper_nouns:
-        pn_clean = pn.strip()
-        words_count = len(pn_clean.split())
-        if 2 <= words_count <= 3:
-            if pn_clean.lower() not in stop_phrases:
-                valid_names.append(pn_clean)
-                
-    if valid_names:
-        most_common_name = Counter(valid_names).most_common(1)[0][0]
-        print(f"👤 [Name Recognition] Primary subject detected as player/person: '{most_common_name}'")
-        return most_common_name
-
     words = re.findall(r'\b[A-Z][a-z]{3,}\b', text) 
     if len(words) < 2:
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
         
     stop_words = {'that', 'this', 'there', 'with', 'from', 'have', 'your', 'which', 'will', 
-                  'about', 'like', 'just', 'when', 'what', 'know', 'feel', 'they', 'team', 'game', 'news', 'first', 'report', 'league', 'south'}
+                  'about', 'like', 'just', 'when', 'what', 'know', 'feel', 'they'}
     filtered = [w for w in words if w.lower() not in stop_words]
     
     if len(filtered) < 2: 
-        return "Latest Update"
-        
+        print("📊 [App Matching Logic] Primary Subject Keyword Extracted: 'NBA Basketball'")
+        return "NBA Basketball"
+    
     most_common = Counter(filtered).most_common(2)
     keyword = f"{most_common[0][0]} {most_common[1][0]}"
     print(f"📊 [App Matching Logic] Primary Subject Keyword Extracted: '{keyword}'")
     return keyword
+# ------------------------------------------------------------------------
 
 def search_vercel_cloud_bridge(keyword, engine="ddg"):
     vercel_endpoint = os.environ.get("VERCEL_BRIDGE_URL")
@@ -146,7 +125,7 @@ def search_vercel_cloud_bridge(keyword, engine="ddg"):
         if r.status_code == 200:
             data = r.json()
             images = data.get("images", [])
-            print(f"🎉 SUCCESS! Vercel Bridge ({engine}) delivered {len(images)} authentic player photos!")
+            print(f"🎉 SUCCESS! Vercel Bridge ({engine}) delivered {len(images)} authentic photos!")
             return images
     except Exception as e:
         print(f"Vercel Bridge ({engine}) Notice: {e}")
