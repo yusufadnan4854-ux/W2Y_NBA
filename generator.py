@@ -93,8 +93,14 @@ def group_paragraphs(paragraphs, min_words=80):
             
     return groups
 
+# --- নতুনভাবে আপগ্রেড করা স্মার্ট কি-ওয়ার্ড মেথড (LeBron, De'Aaron, O'Neal ইত্যাদি নাম হ্যান্ডেল করার জন্য) ---
 def get_primary_keyword_app_logic(text):
-    words = re.findall(r'\b[A-Z][a-z]{3,}\b', text) 
+    # এই রেজেক্সটি ভেতরের বড় হাতের অক্ষর, অ্যাপোস্ট্রফি ও হাইফেনসহ যেকোনো কঠিন নাম সফলভাবে ডিটেক্ট করতে পারে 
+    raw_words = re.findall(r"\b[A-Z][a-zA-Z\'-]{3,}\b", text)
+    
+    # acronyms (যেমন: NBA, ESPN, NFL, USA) ফিল্টার করে রিমুভ করা হচ্ছে যাতে শুধু অরিজিনাল প্লেয়ারের নাম থাকে
+    words = [w for w in raw_words if not w.isupper()]
+    
     if len(words) < 2:
         words = re.findall(r'\b[a-zA-Z]{4,}\b', text)
         
@@ -110,6 +116,7 @@ def get_primary_keyword_app_logic(text):
     keyword = f"{most_common[0][0]} {most_common[1][0]}"
     print(f"📊 [App Matching Logic] Primary Subject Keyword Extracted: '{keyword}'")
     return keyword
+# ------------------------------------------------------------------------
 
 def search_vercel_cloud_bridge(keyword, engine="ddg"):
     vercel_endpoint = os.environ.get("VERCEL_BRIDGE_URL")
@@ -180,7 +187,7 @@ def scrape_images_strictly_web(title, body_text, embedded_photos, num_images_nee
 
     if append_toggle and append_word:
         stop_phrases = {
-            'los angeles', 'golden state', 'basketball', 'summer league', 
+            'los angeles', 'golden state', 'nba basketball', 'summer league', 
             'boston celtics', 'new york', 'miami heat', 'bay area', 'dallas mavericks', 
             'lakers', 'latest update', 'sports news', 'league update', 'news report'
         }
