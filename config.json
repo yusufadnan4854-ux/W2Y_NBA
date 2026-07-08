@@ -1,5 +1,5 @@
 {
-    "rss_urls": "https://sports.yahoo.com/nba/rss.xml",
+    "rss_urls": "https://sports.yahoo.com/nba/rss/",
     "exclude_title_keywords": "odds, betting, bet, trade, trading, Links, link",
     "exclude_body_keywords": "",
     "min_word_count": 125,
