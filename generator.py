@@ -1,4 +1,5 @@
 import os
+import sys  # ডাইনামিক বুটস্ট্র্যাপারের জন্য sys যুক্ত করা হলো
 import re
 import json
 import random
@@ -15,13 +16,26 @@ from PIL import Image, ImageFilter, ImageStat
 from concurrent.futures import ThreadPoolExecutor
 import feedparser  
 import edge_tts
-from keybert import KeyBERT  # KeyBERT ইমপোর্ট করা হলো
 
-# KeyBERT মডেলটি গ্লোবালি লোড করা হলো যেন প্রতিবার ফাংশন কলের সময় রিলোড হতে না হয়
+# KeyBERT ডাইনামিক ইমপোর্ট এবং গ্লোবাল ইনিশিয়ালাইজেশন (Dynamic Bootstrapper)
+kw_model = None
 try:
+    from keybert import KeyBERT
     kw_model = KeyBERT()
+except ImportError:
+    print("📦 KeyBERT লাইব্রেরি পাওয়া যায়নি। ডাইনামিক ইন্সটল করার চেষ্টা করা হচ্ছে...")
+    try:
+        # রানার এনভায়রনমেন্টে স্বয়ংক্রিয়ভাবে keybert ইন্সটল করা হচ্ছে
+        subprocess.run([sys.executable, "-m", "pip", "install", "keybert"], check=True)
+        from keybert import KeyBERT
+        kw_model = KeyBERT()
+        print("✅ KeyBERT সফলভাবে ইন্সটল এবং লোড করা হয়েছে!")
+    except Exception as inst_err:
+        print(f"❌ KeyBERT ডাইনামিক ইন্সটলেশন ব্যর্থ হয়েছে: {inst_err}")
+        print("⚠️ পূর্বের সাধারণ লজিক (Fallback Regex) ব্যবহার করে কাজ চালানো হবে।")
+        kw_model = None
 except Exception as e:
-    print(f"Warning: Failed to initialize KeyBERT globally: {e}")
+    print(f"⚠️ KeyBERT ইনিশিয়ালাইজেশন ত্রুটি: {e}")
     kw_model = None
 
 async def generate_voice_and_subtitles(text, voice, audio_path, srt_path):
