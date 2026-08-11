@@ -37,6 +37,7 @@ jobs:
         YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
         YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
         YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+        GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
       run: |
         python generator.py
 
@@ -44,8 +45,8 @@ jobs:
       if: always()
       run: |
         git config --global user.name "github-actions[bot]"
-        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.email "github-actions[bot]"
         git add processed_urls.txt || echo "No processed_urls.txt changed"
         git commit -m "Update Processed URLs Database [skip ci]" || echo "No changes to commit"
-        git pull --rebase origin main || echo "No pull needed" # গিট পুশ কনফ্লিক্ট এড়ানোর ট্রিকস
+        git pull --rebase origin main || echo "No pull needed"
         git push || echo "No push needed"
